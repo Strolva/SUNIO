@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Jigsaw Toy</title>
+    <style>
+        body { background: #0f172a; color: #38bdf8; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        #controls { margin-bottom: 20px; display: flex; gap: 10px; }
+        button { padding: 12px 20px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        #startBtn { background: #38bdf8; color: #0f172a; }
+        #refBtn { background: #22c55e; color: #fff; display: none; }
+        #stopBtn { background: #ef4444; color: #fff; display: none; }
+        #grid-container { position: relative; padding: 15px; background: #1e293b; border-radius: 12px; }
+        #ghost-wave { position: absolute; top: 15px; left: 15px; width: 380px; height: 380px; opacity: 0.1; pointer-events: none; }
+        #grid { display: grid; grid-template-columns: repeat(3, 120px); gap: 10px; position: relative; }
+        .piece { width: 120px; height: 120px; background: rgba(51, 65, 85, 0.8); cursor: grab; border-radius: 8px; border: 2px solid transparent; overflow: hidden; }
+        .piece.correct { border-color: #38bdf8; }
+        canvas { width: 100%; height: 100%; pointer-events: none; }
+        #status { margin-top: 20px; font-weight: bold; height: 20px; }
+    </style>
+</head>
+<body>
+
+    <h1>Audio Jigsaw</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="initAudio()">INITIALIZE ENGINE</button>
+        <button id="refBtn" onclick="playReference()">PLAY FULL SONG</button>
+        <button id="stopBtn" onclick="stopEverything()">STOP AUDIO</button>
+    </div>
+
+    <div id="grid-container">
+        <canvas id="ghost-wave"></canvas>
+        <div id="grid"></div>
+    </div>
+
+    <p id="status">Click Initialize...</p>
+
+    <script>
+        let audioCtx, mainBuffer;
+        let activeSources = []; // List of all sounds currently playing
+        let pieces = [0,1,2,3,4,5,6,7,8].sort(() => Math.random() - 0.5);
+
+        async function initAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            status.innerText = "Loading...";
+            try {
+                const resp = await fetch('./mysound.mp3');
+                const data = await resp.arrayBuffer();
+                mainBuffer = await audioCtx.decodeAudioData(data);
+                document.getElementById('startBtn').style.display = 'none';
+                document.getElementById('refBtn').style.display = 'inline-block';
+                document.getElementById('stopBtn').style.display = 'inline-block';
+                document.getElementById('status').innerText = "Loaded! Arrange the waves.";
+                drawGhostWave();
+                render();
+            } catch (e) { document.getElementById('status').innerText = "File Error."; }
+        }
+
+        // THE "KILL ALL" SWITCH
+        function stopEverything() {
+            activeSources.forEach(source => {
+                try { source.stop(); } catch(e) {}
+            });
+            activeSources = [];
+            document.getElementById('status').innerText = "Audio Stopped.";
+        }
+
+        function playSlice(idx) {
+            if (!mainBuffer) return;
+            stopEverything(); // Clear old sounds
+            const source = audioCtx.createBufferSource();
+            source.buffer = mainBuffer;
+            const dur = mainBuffer.duration / 9;
+            source.connect(audioCtx.destination);
+            source.start(0, idx * dur, dur);
+            activeSources.push(source);
+        }
+
+        function playReference() {
+            if (!mainBuffer) return;
+            stopEverything(); // Stop slices before playing full song
+            const source = audioCtx.createBufferSource();
+            source.buffer = mainBuffer;
+            source.connect(audioCtx.destination);
+            source.start(0);
+            activeSources.push(source);
+            document.getElementById('status').innerText = "Playing Reference...";
+        }
+
+        function drawGhostWave() {
+            const canvas = document.getElementById('ghost-wave');
+            canvas.width = 380; canvas.height = 380;
+            const ctx = canvas.getContext('2d');
+            ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, 190);
+            for(let x=0; x<380; x++) {
+                ctx.lineTo(x, 190 + Math.sin(x*0.05)*40 + Math.cos(x*0.02)*20);
+            }
+            ctx.stroke();
+        }
+
+        function render() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            pieces.forEach((pIdx, i) => {
+                const div = document.createElement('div');
+                div.className = `piece ${pIdx === i ? 'correct' : ''}`;
+                div.draggable = true;
+                const cvs = document.createElement('canvas');
+                cvs.width = 120; cvs.height = 120;
+                div.appendChild(cvs);
+                const ctx = cvs.getContext('2d');
+                ctx.strokeStyle = pIdx === i ? '#38bdf8' : '#64748b';
+                ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 60);
+                for(let x=0; x<120; x++) {
+                    const gx = x + (pIdx * 120);
+                    ctx.lineTo(x, 60 + Math.sin(gx*0.05)*40 + Math.cos(gx*0.02)*20);
+                }
+                ctx.stroke();
+                div.onclick = () => playSlice(pIdx);
+                div.ondragstart = (e) => e.dataTransfer.setData('text', i);
+                div.ondragover = (e) => e.preventDefault();
+                div.ondrop = (e) => {
+                    const from = e.dataTransfer.getData('text');
+                    [pieces[from], pieces[i]] = [pieces[i], pieces[from]];
+                    playSlice(pIdx);
+                    render();
+                };
+                grid.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>
