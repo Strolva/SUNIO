@@ -110,15 +110,32 @@
             document.getElementById('status').innerText = "Audio Terminated.";
         }
 
-        function playSlice(idx) {
-            if (!mainBuffer) return;
-            stopEverything(); 
-            const source = audioCtx.createBufferSource();
-            source.buffer = mainBuffer;
-            const dur = mainBuffer.duration / 9;
-            source.connect(audioCtx.destination);
-            source.start(0, idx * dur, dur);
-            activeSources.push(source);
+       function playSlice(idx) {
+    if (!mainBuffer) return;
+    stopEverything(); 
+    
+    const source = audioCtx.createBufferSource();
+    const gainNode = audioCtx.createGain(); // This is our volume knob
+    source.buffer = mainBuffer;
+    
+    const sliceWidth = mainBuffer.duration / 9;
+    const startOffset = idx * sliceWidth;
+    
+    // Connect: Source -> Volume -> Speakers
+    source.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    // Start the sound
+    source.start(0, startOffset, sliceWidth);
+    
+    // THE FUNK HACK: Rapidly fade out at the end of the slice
+    // This prevents the "bleeding" into the next bar
+    const fadeTime = 0.05; // 50ms fade
+    gainNode.gain.setValueAtTime(1, audioCtx.currentTime + sliceWidth - fadeTime);
+    gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + sliceWidth);
+    
+    activeSources.push(source);
+}
         }
 
         function playReference() {
@@ -193,3 +210,4 @@
     </script>
 </body>
 </html>
+
