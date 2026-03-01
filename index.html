@@ -18,6 +18,14 @@
         .piece.correct { border-color: #38bdf8; }
         canvas { width: 100%; height: 100%; pointer-events: none; }
         #status { margin-top: 20px; font-weight: bold; height: 20px; }
+        @keyframes pulse {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.02); filter: brightness(1.3); }
+    100% { transform: scale(1); filter: brightness(1); }
+}
+.victory {
+    animation: pulse 1.5s infinite ease-in-out;
+}
     </style>
 </head>
 <body>
@@ -122,6 +130,11 @@
             }
             ctx.stroke();
         }
+        if(isSolved) {
+    status.innerText = "🎉 POC COMPLETE: HARMONY RESTORED";
+    // Make the whole container pulse
+    document.getElementById('grid-container').classList.add('victory');
+}
 
         function render() {
             const grid = document.getElementById('grid');
@@ -157,3 +170,4 @@
 </body>
 
 </html>
+
