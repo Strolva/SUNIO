@@ -75,15 +75,17 @@
 
     <p id="status">Click Initialize to start...</p>
 
-    <script>
+   <script>
     let audioCtx, mainBuffer;
-    let currentSource = null; // This is our "Kill Switch" tracker
+    let currentSource = null; // This tracks the active "match"
     let pieces = [0,1,2,3,4,5,6,7,8].sort(() => Math.random() - 0.5);
     const grid = document.getElementById('grid');
     const status = document.getElementById('status');
 
     async function initAudio() {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
         status.innerText = "Loading audio file...";
         
         try {
@@ -103,17 +105,21 @@
         }
     }
 
-    // New helper function to stop any current audio
+    // THE FIX: Improved Stop function
     function stopCurrentAudio() {
         if (currentSource) {
-            currentSource.stop();
-            currentSource = null;
+            try {
+                currentSource.stop();
+            } catch(e) { 
+                // Ignore errors if the sound already ended
+            }
+            currentSource = null; 
         }
     }
 
     function playSlice(idx) {
         if (!mainBuffer) return;
-        stopCurrentAudio(); // Stop previous sound before playing new slice
+        stopCurrentAudio(); // Kill any playing reference or slice
 
         const source = audioCtx.createBufferSource();
         source.buffer = mainBuffer;
@@ -121,96 +127,40 @@
         
         source.connect(audioCtx.destination);
         source.start(0, idx * dur, dur);
-        currentSource = source; // Track this source
+        
+        // We don't track slices as currentSource because they are short 1-sec blips
     }
 
     function playReference() {
         if (!mainBuffer) return;
         
-        // If it's already playing, stop it and exit (Toggle behavior)
+        // If it's already playing, STOP IT
         if (currentSource) {
             stopCurrentAudio();
             status.innerText = "Audio Stopped.";
             return;
         }
 
+        // Otherwise, START IT
         const source = audioCtx.createBufferSource();
         source.buffer = mainBuffer;
         source.connect(audioCtx.destination);
-        source.start(0);
         
-        currentSource = source; // Track this source
-        status.innerText = "👂 Playing Reference (Click again to stop)";
-        
+        // IMPORTANT: When the song reaches the end, reset the variable
         source.onended = () => {
             currentSource = null;
-            status.innerText = "Reconstruct the song!";
+            status.innerText = "Reference finished.";
         };
+
+        source.start(0);
+        currentSource = source; // Now the button "knows" something is playing
+        status.innerText = "👂 Playing... (Click again to stop)";
     }
 
-    function drawGhostWave() {
-        const canvas = document.getElementById('ghost-wave');
-        canvas.width = 380; canvas.height = 380;
-        const ctx = canvas.getContext('2d');
-        ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(0, 190);
-        for(let x=0; x<380; x++) {
-            const y = 190 + Math.sin(x * 0.05) * 60 + Math.cos(x * 0.02) * 30;
-            ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    }
-
-    function render() {
-        grid.innerHTML = '';
-        const isSolved = pieces.every((p, i) => p === i);
-
-        pieces.forEach((pIdx, i) => {
-            const div = document.createElement('div');
-            div.className = `piece ${pIdx === i ? 'correct' : ''}`;
-            div.draggable = true;
-            
-            const cvs = document.createElement('canvas');
-            cvs.width = 120; cvs.height = 120;
-            div.appendChild(cvs);
-            
-            const ctx = cvs.getContext('2d');
-            ctx.strokeStyle = pIdx === i ? '#38bdf8' : '#64748b';
-            ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.moveTo(0, 60);
-            for(let x=0; x<120; x++) {
-                const gx = x + (pIdx * 120);
-                const y = 60 + Math.sin(gx * 0.05) * 60 + Math.cos(gx * 0.02) * 30;
-                ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-
-            div.onclick = () => {
-                playSlice(pIdx);
-                div.style.transform = "scale(0.95)";
-                setTimeout(() => div.style.transform = "scale(1)", 100);
-            };
-
-            div.ondragstart = (e) => e.dataTransfer.setData('text', i);
-            div.ondragover = (e) => e.preventDefault();
-            div.ondrop = (e) => {
-                const from = e.dataTransfer.getData('text');
-                [pieces[from], pieces[i]] = [pieces[i], pieces[from]];
-                playSlice(pIdx);
-                render();
-            };
-            
-            grid.appendChild(div);
-        });
-
-        if(isSolved) {
-            status.innerText = "🎉 PERFECT HARMONY!";
-            // Optional: Auto-play full track on win
-            if (!currentSource) playReference();
-        }
-    }
+    // ... (Keep drawGhostWave and render functions from previous version) ...
+    // Note: Ensure render() calls playSlice(pIdx) on click and drop.
 </script>
 </body>
 </html>
+
 
