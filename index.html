@@ -76,79 +76,82 @@
     <p id="status">Ready to test...</p>
 
     <script>
-        /* THE "PLUMBING" (JavaScript) */
-        let audioCtx, mainBuffer;
-        let activeSources = []; 
-        let pieces = [0,1,2,3,4,5,6,7,8].sort(() => Math.random() - 0.5);
+    let audioCtx, mainBuffer;
+    let activeSources = []; 
+    let pieces = [0,1,2,3,4,5,6,7,8].sort(() => Math.random() - 0.5);
 
-        async function initAudio() {
+    async function initAudio() {
+        if (!audioCtx) {
             audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const status = document.getElementById('status');
-            status.innerText = "Fetching mysound.mp3...";
+        }
+        
+        const status = document.getElementById('status');
+        status.innerText = "Connecting to Funk Engine...";
+        
+        try {
+            // Added the version tag to kill the cache
+            const resp = await fetch('./mysound.mp3?v=' + Date.now()); 
             
-            try {
-                const resp = await fetch('./mysound.mp3');
-                if (!resp.ok) throw new Error("File not found. Check filename case!");
-                const data = await resp.arrayBuffer();
-                mainBuffer = await audioCtx.decodeAudioData(data);
-                
-                document.getElementById('startBtn').style.display = 'none';
-                document.getElementById('refBtn').style.display = 'inline-block';
-                document.getElementById('stopBtn').style.display = 'inline-block';
-                status.innerText = "Engine Live. Solve the puzzle!";
-                
-                drawGhostWave();
-                render();
-            } catch (e) {
-                status.innerText = "❌ Error: " + e.message;
-            }
+            if (!resp.ok) throw new Error("File not found. Check GitHub!");
+            
+            const data = await resp.arrayBuffer();
+            status.innerText = "Decoding 9-Bar Loop...";
+            mainBuffer = await audioCtx.decodeAudioData(data);
+            
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('refBtn').style.display = 'inline-block';
+            document.getElementById('stopBtn').style.display = 'inline-block';
+            status.innerText = "Ready. 9 Bars Loaded!";
+            
+            drawGhostWave();
+            render();
+        } catch (e) {
+            status.innerText = "❌ Error: " + e.message;
+            console.error(e);
         }
+    }
 
-        function stopEverything() {
-            activeSources.forEach(s => { try { s.stop(); } catch(e) {} });
-            activeSources = [];
-            document.getElementById('status').innerText = "Audio Terminated.";
-        }
+    function stopEverything() {
+        activeSources.forEach(s => { try { s.stop(); } catch(e) {} });
+        activeSources = [];
+        document.getElementById('status').innerText = "Stopped.";
+    }
 
-       function playSlice(idx) {
-    if (!mainBuffer) return;
-    stopEverything(); 
-    
-    const source = audioCtx.createBufferSource();
-    const gainNode = audioCtx.createGain(); // This is our volume knob
-    source.buffer = mainBuffer;
-    
-    const sliceWidth = mainBuffer.duration / 9;
-    const startOffset = idx * sliceWidth;
-    
-    // Connect: Source -> Volume -> Speakers
-    source.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-    
-    // Start the sound
-    source.start(0, startOffset, sliceWidth);
-    
-    // THE FUNK HACK: Rapidly fade out at the end of the slice
-    // This prevents the "bleeding" into the next bar
-    const fadeTime = 0.05; // 50ms fade
-    gainNode.gain.setValueAtTime(1, audioCtx.currentTime + sliceWidth - fadeTime);
-    gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + sliceWidth);
-    
-    activeSources.push(source);
-}
-        }
+    function playSlice(idx) {
+        if (!mainBuffer) return;
+        stopEverything(); 
+        
+        const source = audioCtx.createBufferSource();
+        const gainNode = audioCtx.createGain(); 
+        source.buffer = mainBuffer;
+        
+        const sliceWidth = mainBuffer.duration / 9;
+        const startOffset = idx * sliceWidth;
+        const playDuration = sliceWidth * 0.98; // 98% duration to keep it tight
 
-        function playReference() {
-            if (!mainBuffer) return;
-            stopEverything();
-            const source = audioCtx.createBufferSource();
-            source.buffer = mainBuffer;
-            source.connect(audioCtx.destination);
-            source.start(0);
-            activeSources.push(source);
-            document.getElementById('status').innerText = "Playing Reference Track...";
-            source.onended = () => { if(activeSources.includes(source)) document.getElementById('status').innerText = "Reference ended."; };
-        }
+        source.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        // Quick Fade Out to make it punchy
+        gainNode.gain.setValueAtTime(1, audioCtx.currentTime + playDuration - 0.05);
+        gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + playDuration);
+        
+        source.start(0, startOffset, playDuration);
+        activeSources.push(source);
+    }
+
+    function playReference() {
+        if (!mainBuffer) return;
+        stopEverything();
+        const source = audioCtx.createBufferSource();
+        source.buffer = mainBuffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+        activeSources.push(source);
+        document.getElementById('status').innerText = "Playing Full 9-Bar Loop...";
+    }
+
+
 
         function drawGhostWave() {
             const canvas = document.getElementById('ghost-wave');
@@ -210,4 +213,5 @@
     </script>
 </body>
 </html>
+
 
